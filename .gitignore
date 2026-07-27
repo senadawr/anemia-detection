@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+dataset_clean/
+logs/
+results/
+saved_models/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log

@@ -1,0 +1,12 @@
+tensorflow>=2.16
+scikit-learn>=1.5
+opencv-python>=4.10
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.9
+pillow>=10.4
+tqdm>=4.66
+joblib>=1.4
+scipy>=1.14
+PyQt6>=6.7
+tensorboard>=2.16
