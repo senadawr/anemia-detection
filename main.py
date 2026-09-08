@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from anemia_detection_app.config import build_default_config
-from anemia_detection_app.gui import run_application
+from anemia_detection_app.web_gui import run_application
 from anemia_detection_app.training import PipelineTrainer
 
 

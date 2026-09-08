@@ -113,6 +113,18 @@ class Evaluator:
         plt.close(fig)
 
     @staticmethod
+    def roc_points(y_true: np.ndarray, y_score: np.ndarray) -> list[dict[str, float]]:
+        """Return ROC coordinates for the interactive web chart."""
+
+        if len(np.unique(y_true)) < 2:
+            return []
+        false_positive_rate, true_positive_rate, _ = roc_curve(y_true, y_score)
+        return [
+            {"false_positive_rate": float(fpr), "true_positive_rate": float(tpr)}
+            for fpr, tpr in zip(false_positive_rate, true_positive_rate)
+        ]
+
+    @staticmethod
     def plot_history(history: dict[str, list[float]], output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         if not history:

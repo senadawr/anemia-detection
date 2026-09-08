@@ -16,6 +16,7 @@ from .dimensionality_reduction import ReducerFactory, ReducerStore
 from .evaluation import EvaluationBundle, Evaluator
 from .feature_extraction import FeatureMatrix, MobileNetFeatureExtractor
 from .models import BundleStore, ClassifierBundle, ClassifierFactory, extract_positive_probability
+from .runtime import configure_accelerator
 from .utils.io_utils import write_json
 from .utils.logging_utils import setup_logging
 
@@ -47,6 +48,11 @@ class PipelineTrainer:
         self.config = config
         self.config.ensure_directories()
         self.logger = setup_logging(config.output.logs_dir)
+        self.accelerator = configure_accelerator()
+        if self.accelerator["available"]:
+            self.logger.info("Using TensorFlow GPU(s): %s", ", ".join(self.accelerator["devices"]))
+        else:
+            self.logger.info("No TensorFlow GPU is visible; training will use the CPU.")
         tf.keras.utils.set_random_seed(self.config.training.random_seed)
         try:
             tf.config.experimental.enable_op_determinism()
@@ -128,6 +134,7 @@ class PipelineTrainer:
             "feature_shape": list(train_features.features.shape[1:]),
             "reducer": run_config.reduction.reducer,
             "classifier": run_config.classifier.classifier,
+            "accelerator": self.accelerator,
         }
         write_json(metadata_path, metadata)
         if history:
@@ -176,6 +183,11 @@ class PipelineTrainer:
             split_dir / "confusion_matrix.png",
             f"{split_name.title()} Confusion Matrix",
         )
+        chart_payload: dict[str, Any] = {
+            "class_names": list(class_names),
+            "confusion_matrix": evaluation.confusion_matrix.tolist(),
+            "roc": [],
+        }
         if hasattr(classifier, "predict_proba") and len(np.unique(labels)) > 1:
             probabilities = classifier.predict_proba(features)
             scores = probabilities[:, 1] if probabilities.shape[1] > 1 else probabilities.ravel()
@@ -185,6 +197,8 @@ class PipelineTrainer:
                 split_dir / "roc_curve.png",
                 f"{split_name.title()} ROC Curve",
             )
+            chart_payload["roc"] = Evaluator.roc_points(labels, scores)
+        write_json(split_dir / "chart_data.json", chart_payload)
 
 
 class PipelinePredictor:

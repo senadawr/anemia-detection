@@ -8,5 +8,5 @@ pillow>=10.4
 tqdm>=4.66
 joblib>=1.4
 scipy>=1.14
-PyQt6>=6.7
+Flask>=3.0
 tensorboard>=2.16

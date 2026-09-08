@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anemia Classifier</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#overview" aria-label="HemaLens home"><span class="brand-mark">H</span><span>Home</span></a>
+      <div class="run-status" id="run-status"><span class="status-dot"></span><span>Ready to train</span></div>
+    </header>
+
+    <section class="hero" id="overview">
+      <div><p class="eyebrow">Clinical image intelligence</p><h1>Anemia Classifier</h1><p class="lede">An investigation of local and global geometric features for MobileNet-Based anemia detection through palpebral conjunctiva.</p></div>
+      <button class="primary-action" id="train-button" type="button">Start training <span aria-hidden="true">→</span></button>
+    </section>
+
+    <section class="workspace">
+      <aside class="control-panel" aria-label="Pipeline controls">
+        <div class="panel-heading"><p class="eyebrow">Configuration</p><h2>Pipeline setup</h2></div>
+        <label>Dataset root<input id="dataset-root" type="text" autocomplete="off"></label>
+        <div class="field-grid">
+          <label>Reducer<select id="reducer"><option value="none">None</option><option value="lle">LLE</option><option value="isomap">Isomap</option></select></label>
+          <label>Classifier<select id="classifier"><option value="svm">Support vector machine</option><option value="logistic_regression">Logistic regression</option><option value="random_forest">Random forest</option></select></label>
+        </div>
+        <label class="switch"><input id="fine-tune" type="checkbox"><span></span>Fine-tune MobileNetV2</label>
+        <p class="hint">Your settings are copied into the run; training logic and saved artifacts remain unchanged.</p>
+        <hr>
+        <div class="panel-heading compact"><p class="eyebrow">Saved model</p><h2>Open a run</h2></div>
+        <label>Model directory<input id="model-directory" type="text" placeholder=".../saved_models/run_name"></label>
+        <button class="secondary-action" id="load-button" type="button">Load saved model</button>
+      </aside>
+
+      <div class="main-panel">
+        <section class="metric-grid" aria-label="Evaluation summary" id="metrics"><div class="empty-state">Train or load a model to see its evaluation.</div></section>
+        <section class="prediction-card">
+          <div><p class="eyebrow">Single image inference</p><h2>Check a sample</h2><p class="hint">Upload a supported image to use the currently loaded pipeline.</p></div>
+          <div class="prediction-controls"><label class="file-input"><input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff"><span>Choose image</span></label><button class="primary-action" id="predict-button" type="button" disabled>Predict</button></div>
+          <div id="prediction-result" class="prediction-result" aria-live="polite">No prediction yet.</div>
+        </section>
+
+        <section class="figure-section" aria-label="Interactive evaluation figures">
+          <div class="section-title"><div><p class="eyebrow">Interactive figures</p><h2>Model performance</h2></div><div class="tab-list" role="tablist" aria-label="Dataset split"><button role="tab" aria-selected="true" data-split="training" type="button">Training</button><button role="tab" aria-selected="false" data-split="validation" type="button">Validation</button><button role="tab" aria-selected="false" data-split="testing" type="button">Testing</button></div></div>
+          <div class="chart-grid"><article class="chart-wrap"><div class="chart-header"><h3 id="matrix-title">Confusion matrix</h3><span>Click a cell for detail</span></div><div id="confusion-chart" class="chart-content"></div></article><article class="chart-wrap"><div class="chart-header"><h3 id="roc-title">ROC curve</h3><span>Hover a point to inspect</span></div><div id="roc-chart" class="chart-content"></div></article></div>
+          <article class="chart-wrap wide-chart"><div class="chart-header"><h3>Fine-tuning curves</h3><span>Hover a point to inspect</span></div><div id="history-chart" class="chart-content"></div></article>
+        </section>
+      </div>
+    </section>
+    <section class="activity"><div class="section-title"><div><p class="eyebrow">Run activity</p><h2>Live log</h2></div><button class="text-button" id="clear-log" type="button">Clear view</button></div><pre id="log-box">Starting dashboard…</pre></section>
+  </main>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
