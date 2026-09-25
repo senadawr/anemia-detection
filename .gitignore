@@ -5,6 +5,7 @@ venv/
 env/
 
 dataset_clean/
+dataset_new/
 logs/
 results/
 saved_models/
