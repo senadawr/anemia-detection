@@ -8,6 +8,7 @@ from typing import Iterable
 
 import cv2
 import numpy as np
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 from .config import PreprocessingConfig
 
@@ -41,7 +42,10 @@ class ImagePreprocessor:
         if image.ndim == 2:
             image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         elif image.shape[2] == 4:
-            image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+            bgr = image[:, :, :3].astype(np.float32)
+            alpha = image[:, :, 3:4].astype(np.float32) / 255.0
+            neutral_background = np.full_like(bgr, 127.5)
+            image = np.round(bgr * alpha + neutral_background * (1.0 - alpha)).astype(np.uint8)
 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(
@@ -58,7 +62,7 @@ class ImagePreprocessor:
 
         image = image.astype(np.float32)
         if self.config.normalize:
-            image /= 255.0
+            image = preprocess_input(image)
         return image
 
     def preprocess_path(self, image_path: str | Path) -> np.ndarray:

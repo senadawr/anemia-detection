@@ -6,7 +6,7 @@ import hashlib
 from importlib.util import find_spec
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import joblib
 import numpy as np
@@ -107,12 +107,14 @@ class MobileNetFeatureExtractor:
         train_dataset: tf.data.Dataset,
         validation_dataset: tf.data.Dataset,
         output_dir: Path,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> dict[str, list[float]]:
-        """Train a lightweight binary head with the MobileNetV2 backbone."""
+        """Train a binary head and the configured trailing backbone layers."""
 
         if not self.config.feature_extractor.fine_tune:
             return {}
 
+        self._configure_fine_tuning()
         output_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_path = output_dir / "best_feature_extractor.keras"
         log_dir = output_dir / self.config.training.tensorboard_log_dir
@@ -141,6 +143,18 @@ class MobileNetFeatureExtractor:
         if find_spec("tensorboard") is not None:
             callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=str(log_dir)))
 
+        if progress_callback is not None:
+            def report_epoch(epoch: int, logs: dict[str, Any] | None = None) -> None:
+                values = logs or {}
+                metrics = " ".join(
+                    f"{name}={float(values[name]):.4f}"
+                    for name in ("loss", "accuracy", "auc", "val_loss", "val_accuracy", "val_auc")
+                    if name in values
+                )
+                progress_callback(f"Fine-tune epoch {epoch + 1}/{self.config.training.fine_tune_epochs}: {metrics}")
+
+            callbacks.append(tf.keras.callbacks.LambdaCallback(on_epoch_end=report_epoch))
+
         self.classifier_model.compile(
             optimizer=tf.keras.optimizers.Adam(self.config.training.fine_tune_learning_rate),
             loss="binary_crossentropy",
@@ -160,6 +174,17 @@ class MobileNetFeatureExtractor:
             self.feature_model = self._build_feature_model()
 
         return history.history
+
+    def _configure_fine_tuning(self) -> None:
+        """Freeze the backbone except for its configured trailing layers."""
+
+        layers_to_unfreeze = self.config.feature_extractor.fine_tune_unfreeze_last_n_layers
+        self.backbone.trainable = True
+        for layer in self.backbone.layers:
+            layer.trainable = False
+        if layers_to_unfreeze > 0:
+            for layer in self.backbone.layers[-layers_to_unfreeze:]:
+                layer.trainable = not isinstance(layer, tf.keras.layers.BatchNormalization)
 
     def extract_split_features(
         self,
@@ -204,11 +229,13 @@ class MobileNetFeatureExtractor:
             "paths": split.paths,
             "image_size": self.config.preprocessing.image_size,
             "normalize": self.config.preprocessing.normalize,
+            "preprocessing": "mobilenet_v2_preprocess_input",
             "use_clahe": self.config.preprocessing.use_clahe,
             "use_histogram_equalization": self.config.preprocessing.use_histogram_equalization,
             "dense_feature_dim": self.config.feature_extractor.dense_feature_dim,
             "weights": self.config.feature_extractor.weights,
             "fine_tune": self.config.feature_extractor.fine_tune,
+            "fine_tune_unfreeze_last_n_layers": self.config.feature_extractor.fine_tune_unfreeze_last_n_layers,
         }
         digest = hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()
         return digest[:24]

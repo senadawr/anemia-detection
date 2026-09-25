@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 import tensorflow as tf
@@ -14,6 +15,7 @@ from .config import AppConfig
 from .dataset import DatasetBundle, DatasetLoader
 from .dimensionality_reduction import ReducerFactory, ReducerStore
 from .evaluation import EvaluationBundle, Evaluator
+from .explainability import explain_test_images
 from .feature_extraction import FeatureMatrix, MobileNetFeatureExtractor
 from .models import BundleStore, ClassifierBundle, ClassifierFactory, extract_positive_probability
 from .runtime import configure_accelerator
@@ -44,8 +46,15 @@ class TrainingResult:
 class PipelineTrainer:
     """Train, evaluate, and persist a complete pipeline."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        progress_callback: Callable[[str], None] | None = None,
+        result_dir_callback: Callable[[Path], None] | None = None,
+    ) -> None:
         self.config = config
+        self.progress_callback = progress_callback
+        self.result_dir_callback = result_dir_callback
         self.config.ensure_directories()
         self.logger = setup_logging(config.output.logs_dir)
         self.accelerator = configure_accelerator()
@@ -83,12 +92,19 @@ class PipelineTrainer:
         cache_dir = result_dir / "feature_cache"
         model_dir.mkdir(parents=True, exist_ok=True)
         result_dir.mkdir(parents=True, exist_ok=True)
+        if self.result_dir_callback:
+            self.result_dir_callback(result_dir)
 
-        train_dataset = loader.build_tf_dataset(dataset_bundle.training, batch_size=run_config.training.batch_size, shuffle=False)
+        train_dataset = loader.build_tf_dataset(dataset_bundle.training, batch_size=run_config.training.batch_size, shuffle=True)
         validation_dataset = loader.build_tf_dataset(dataset_bundle.validation, batch_size=run_config.training.batch_size, shuffle=False)
 
         extractor = MobileNetFeatureExtractor(run_config)
-        history = extractor.fine_tune(train_dataset, validation_dataset, model_dir)
+        history = extractor.fine_tune(
+            train_dataset,
+            validation_dataset,
+            model_dir,
+            progress_callback=self.progress_callback,
+        )
 
         train_features = extractor.extract_split_features(dataset_bundle.training, run_config.training.batch_size, cache_dir)
         validation_features = extractor.extract_split_features(dataset_bundle.validation, run_config.training.batch_size, cache_dir)
@@ -144,6 +160,28 @@ class PipelineTrainer:
         self._save_split_artifacts("training", train_features.labels, training_eval, result_dir, dataset_bundle.training.class_names, reduced_train, classifier)
         self._save_split_artifacts("validation", validation_features.labels, validation_eval, result_dir, dataset_bundle.validation.class_names, reduced_validation, classifier)
         self._save_split_artifacts("testing", testing_features.labels, testing_eval, result_dir, dataset_bundle.testing.class_names, reduced_testing, classifier)
+
+        if run_config.training.shap_enabled:
+            self.progress_callback and self.progress_callback(
+                f"Starting SHAP investigation on {run_config.training.shap_samples} test images..."
+            )
+            from .explainability import explain_test_images
+            explain_test_images(
+                run_config,
+                ClassifierBundle(
+                    root_dir=model_dir,
+                    feature_model_path=feature_model_path,
+                    reducer_path=reducer_path,
+                    classifier_path=classifier_path,
+                    metadata_path=metadata_path,
+                ),
+                dataset_bundle.testing,
+                result_dir / "explainability",
+                run_config.training.shap_samples,
+                run_config.training.shap_max_evals,
+                progress_callback=self.progress_callback,
+            )
+            self.progress_callback and self.progress_callback("SHAP investigation complete.")
 
         bundle = ClassifierBundle(
             root_dir=model_dir,

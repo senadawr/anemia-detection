@@ -27,6 +27,7 @@
           <label>Classifier<select id="classifier"><option value="svm">Support vector machine</option><option value="logistic_regression">Logistic regression</option><option value="random_forest">Random forest</option></select></label>
         </div>
         <label class="switch"><input id="fine-tune" type="checkbox"><span></span>Fine-tune MobileNetV2</label>
+        <label class="switch"><input id="shap-enabled" type="checkbox"><span></span>Investigate with SHAP</label>
         <p class="hint">Your settings are copied into the run; training logic and saved artifacts remain unchanged.</p>
         <hr>
         <div class="panel-heading compact"><p class="eyebrow">Saved model</p><h2>Open a run</h2></div>
@@ -46,6 +47,7 @@
           <div class="section-title"><div><p class="eyebrow">Interactive figures</p><h2>Model performance</h2></div><div class="tab-list" role="tablist" aria-label="Dataset split"><button role="tab" aria-selected="true" data-split="training" type="button">Training</button><button role="tab" aria-selected="false" data-split="validation" type="button">Validation</button><button role="tab" aria-selected="false" data-split="testing" type="button">Testing</button></div></div>
           <div class="chart-grid"><article class="chart-wrap"><div class="chart-header"><h3 id="matrix-title">Confusion matrix</h3><span>Click a cell for detail</span></div><div id="confusion-chart" class="chart-content"></div></article><article class="chart-wrap"><div class="chart-header"><h3 id="roc-title">ROC curve</h3><span>Hover a point to inspect</span></div><div id="roc-chart" class="chart-content"></div></article></div>
           <article class="chart-wrap wide-chart"><div class="chart-header"><h3>Fine-tuning curves</h3><span>Hover a point to inspect</span></div><div id="history-chart" class="chart-content"></div></article>
+          <article class="chart-wrap wide-chart"><div class="chart-header"><h3>SHAP investigation</h3><span>Model influence, not medical evidence</span></div><div id="shap-gallery" class="shap-gallery"><div class="chart-empty">Enable SHAP before training to generate image explanations.</div></div></article>
         </section>
       </div>
     </section>

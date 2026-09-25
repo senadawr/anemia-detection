@@ -14,7 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 
 from .config import AppConfig, build_default_config
 from .models import ClassifierBundle
@@ -54,6 +54,7 @@ def _runtime_config(payload: dict[str, Any]) -> AppConfig:
     config.reduction.reducer = payload.get("reducer", "none")  # type: ignore[assignment]
     config.classifier.classifier = payload.get("classifier", "svm")  # type: ignore[assignment]
     config.feature_extractor.fine_tune = bool(payload.get("fine_tune", False))
+    config.training.shap_enabled = bool(payload.get("shap_enabled", False))
     return config
 
 
@@ -94,7 +95,15 @@ def create_app() -> Flask:
 
         def run_training() -> None:
             try:
-                result = PipelineTrainer(config).train_pipeline(
+                def publish_result_dir(path: Path) -> None:
+                    with state.lock:
+                        state.result_dir = path
+
+                result = PipelineTrainer(
+                    config,
+                    progress_callback=state.log,
+                    result_dir_callback=publish_result_dir,
+                ).train_pipeline(
                     reducer_name=config.reduction.reducer,
                     classifier_name=config.classifier.classifier,
                 )
@@ -177,7 +186,17 @@ def create_app() -> Flask:
             path = result_dir / split / "chart_data.json"
             if path.exists():
                 charts[split] = json.loads(path.read_text(encoding="utf-8"))
-        return jsonify({"metrics": metrics, "history": history, "charts": charts, "result_dir": str(result_dir)})
+        shap_path = result_dir / "explainability" / "manifest.json"
+        shap_results = json.loads(shap_path.read_text(encoding="utf-8")) if shap_path.exists() else []
+        return jsonify({"metrics": metrics, "history": history, "charts": charts, "shap": shap_results, "result_dir": str(result_dir)})
+
+    @app.get("/api/shap/<path:filename>")
+    def shap_image(filename: str):
+        with state.lock:
+            result_dir = state.result_dir
+        if result_dir is None:
+            return jsonify({"error": "No run is loaded."}), 404
+        return send_from_directory(result_dir / "explainability", filename)
 
     return app
 

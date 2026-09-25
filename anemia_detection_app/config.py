@@ -101,6 +101,9 @@ class TrainingConfig:
     tensorboard_log_dir: str = "tensorboard"
     random_seed: int = 42
     workers: int = 1
+    shap_enabled: bool = False
+    shap_samples: int = 4
+    shap_max_evals: int = 100
 
 
 @dataclass(slots=True)
@@ -154,7 +157,11 @@ class AppConfig:
         feature_extractor = FeatureExtractorConfig(**payload["feature_extractor"])
         reduction = ReductionConfig(**payload["reduction"])
         classifier = ClassifierConfig(**payload["classifier"])
-        training = TrainingConfig(**payload["training"])
+        training_payload = dict(payload["training"])
+        training_payload.setdefault("shap_enabled", False)
+        training_payload.setdefault("shap_samples", 4)
+        training_payload.setdefault("shap_max_evals", 100)
+        training = TrainingConfig(**training_payload)
         output = OutputConfig(
             models_dir=Path(payload["output"]["models_dir"]),
             logs_dir=Path(payload["output"]["logs_dir"]),
