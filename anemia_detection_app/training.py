@@ -165,7 +165,6 @@ class PipelineTrainer:
             self.progress_callback and self.progress_callback(
                 f"Starting SHAP investigation on {run_config.training.shap_samples} test images..."
             )
-            from .explainability import explain_test_images
             explain_test_images(
                 run_config,
                 ClassifierBundle(
@@ -198,8 +197,7 @@ class PipelineTrainer:
         predictions = classifier.predict(features)
         scores = None
         if hasattr(classifier, "predict_proba"):
-            probabilities = classifier.predict_proba(features)
-            scores = probabilities[:, 1] if probabilities.ndim == 2 and probabilities.shape[1] > 1 else probabilities.ravel()
+            scores = extract_positive_probability(classifier, features)
         return Evaluator.evaluate_split(labels, predictions, scores)
 
     def _save_split_artifacts(
@@ -227,8 +225,7 @@ class PipelineTrainer:
             "roc": [],
         }
         if hasattr(classifier, "predict_proba") and len(np.unique(labels)) > 1:
-            probabilities = classifier.predict_proba(features)
-            scores = probabilities[:, 1] if probabilities.shape[1] > 1 else probabilities.ravel()
+            scores = extract_positive_probability(classifier, features)
             Evaluator.plot_roc_curve(
                 labels,
                 scores,

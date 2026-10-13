@@ -15,7 +15,7 @@ DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results"
 DEFAULT_ASSETS_DIR = PROJECT_ROOT / "assets"
 
 SplitName = Literal["training", "validation", "testing"]
-ReducerName = Literal["none", "lle", "isomap"]
+ReducerName = Literal["none", "lle", "isomap", "lle_isomap"]
 ClassifierName = Literal["svm", "logistic_regression", "random_forest"]
 
 
@@ -63,7 +63,7 @@ class ReductionConfig:
     """Dimensionality reduction settings."""
 
     reducer: ReducerName = "none"
-    n_components: int = 64
+    n_components: int = 8
     n_neighbors: int = 10
     lle_method: str = "standard"
     lle_eigen_solver: str = "auto"

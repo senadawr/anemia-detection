@@ -51,8 +51,14 @@ def _runtime_config(payload: dict[str, Any]) -> AppConfig:
     dataset_root = str(payload.get("dataset_root", "")).strip()
     if dataset_root:
         config.dataset.root_dir = Path(dataset_root).expanduser().resolve()
-    config.reduction.reducer = payload.get("reducer", "none")  # type: ignore[assignment]
-    config.classifier.classifier = payload.get("classifier", "svm")  # type: ignore[assignment]
+    reducer = payload.get("reducer", "none")
+    if reducer not in {"none", "lle", "isomap", "lle_isomap"}:
+        raise ValueError(f"Unsupported reducer: {reducer}")
+    classifier = payload.get("classifier", "svm")
+    if classifier not in {"svm", "logistic_regression", "random_forest"}:
+        raise ValueError(f"Unsupported classifier: {classifier}")
+    config.reduction.reducer = reducer  # type: ignore[assignment]
+    config.classifier.classifier = classifier  # type: ignore[assignment]
     config.feature_extractor.fine_tune = bool(payload.get("fine_tune", False))
     config.training.shap_enabled = bool(payload.get("shap_enabled", False))
     return config
@@ -85,12 +91,15 @@ def create_app() -> Flask:
     @app.post("/api/train")
     def train():
         payload = request.get_json(silent=True) or {}
+        try:
+            config = _runtime_config(payload)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
         with state.lock:
             if state.training:
                 return jsonify({"error": "A training run is already in progress."}), 409
             state.training = True
             state.error = None
-        config = _runtime_config(payload)
         state.log(f"Training requested: {config.reduction.reducer} + {config.classifier.classifier}.")
 
         def run_training() -> None:

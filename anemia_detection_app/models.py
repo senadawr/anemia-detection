@@ -75,6 +75,8 @@ class ClassifierFactory:
                 class_weight=config.class_weight,
                 random_state=42,
             )
+        if config.classifier != "svm":
+            raise ValueError(f"Unsupported classifier: {config.classifier}")
         estimator = SVC(
             kernel="rbf",
             C=config.svm_c,

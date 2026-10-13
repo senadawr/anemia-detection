@@ -73,7 +73,7 @@ def explain_test_images(
         prediction = float(predict_probability(image[np.newaxis, ...])[0])
         predicted_class = int(prediction >= 0.5)
         predicted_class_name = test_split.class_names[predicted_class]
-        class_relative_values = values if predicted_class == 1 else -values
+        class_relative_values = -values
         output_path = output_dir / f"explanation_{index:02d}.png"
         _save_heatmap(
             image,
@@ -151,7 +151,10 @@ def _save_heatmap(
     axes[0].set_title(name)
     axes[1].imshow(image)
     axes[1].imshow(importance, cmap="coolwarm", vmin=-limit, vmax=limit, alpha=0.65)
-    axes[1].set_title(f"SHAP overlay | predicted {predicted_class_name} | p(class 1) {probability:.3f}")
+    axes[1].set_title(
+        f"SHAP overlay | red: anemic | blue: non-anemic | predicted {predicted_class_name} | "
+        f"p(class 1) {probability:.3f}"
+    )
     for axis in axes:
         axis.axis("off")
     figure.savefig(output_path, dpi=160)

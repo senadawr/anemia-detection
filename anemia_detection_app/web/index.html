@@ -23,7 +23,7 @@
         <div class="panel-heading"><p class="eyebrow">Configuration</p><h2>Pipeline setup</h2></div>
         <label>Dataset root<input id="dataset-root" type="text" autocomplete="off"></label>
         <div class="field-grid">
-          <label>Reducer<select id="reducer"><option value="none">None</option><option value="lle">LLE</option><option value="isomap">Isomap</option></select></label>
+            <label>Reducer<select id="reducer"><option value="none">None</option><option value="lle">LLE</option><option value="isomap">Isomap</option><option value="lle_isomap">LLE followed by Isomap</option></select></label>
           <label>Classifier<select id="classifier"><option value="svm">Support vector machine</option><option value="logistic_regression">Logistic regression</option><option value="random_forest">Random forest</option></select></label>
         </div>
         <label class="switch"><input id="fine-tune" type="checkbox"><span></span>Fine-tune MobileNetV2</label>

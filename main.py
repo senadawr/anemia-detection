@@ -15,7 +15,11 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Anemia detection thesis application")
     parser.add_argument("--train", action="store_true", help="Run a training job without opening the GUI")
-    parser.add_argument("--reducer", choices=["none", "lle", "isomap"], default="none")
+    parser.add_argument(
+        "--reducer",
+        choices=["none", "lle", "isomap", "lle_isomap"],
+        default="none",
+    )
     parser.add_argument("--classifier", choices=["svm", "logistic_regression", "random_forest"], default="svm")
     parser.add_argument("--fine-tune", action="store_true", help="Enable MobileNetV2 fine-tuning")
     args = parser.parse_args()

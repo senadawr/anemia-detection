@@ -47,6 +47,10 @@ class LLEReducer:
     """Locally Linear Embedding wrapper."""
 
     def __init__(self, config: ReductionConfig) -> None:
+        if config.n_components > config.n_neighbors:
+            raise ValueError(
+                "LLE requires n_components to be less than or equal to n_neighbors."
+            )
         self.config = config
         self.model = LocallyLinearEmbedding(
             n_components=config.n_components,
@@ -89,6 +93,26 @@ class IsomapReducer:
         return self.model.fit_transform(features)
 
 
+class LLEIsomapReducer:
+    """Sequential reducer that applies LLE followed by ISOMAP."""
+
+    def __init__(self, config: ReductionConfig) -> None:
+        self.lle = LLEReducer(config)
+        self.isomap = IsomapReducer(config)
+
+    def fit(self, features: np.ndarray, labels: np.ndarray | None = None) -> "LLEIsomapReducer":
+        lle_features = self.lle.fit_transform(features, labels)
+        self.isomap.fit(lle_features, labels)
+        return self
+
+    def transform(self, features: np.ndarray) -> np.ndarray:
+        return self.isomap.transform(self.lle.transform(features))
+
+    def fit_transform(self, features: np.ndarray, labels: np.ndarray | None = None) -> np.ndarray:
+        lle_features = self.lle.fit_transform(features, labels)
+        return self.isomap.fit_transform(lle_features, labels)
+
+
 class ReducerFactory:
     """Create the requested reducer implementation."""
 
@@ -98,7 +122,11 @@ class ReducerFactory:
             return LLEReducer(config)
         if config.reducer == "isomap":
             return IsomapReducer(config)
-        return IdentityReducer(n_components=None)
+        if config.reducer == "lle_isomap":
+            return LLEIsomapReducer(config)
+        if config.reducer == "none":
+            return IdentityReducer(n_components=None)
+        raise ValueError(f"Unsupported reducer: {config.reducer}")
 
 
 class ReducerStore:

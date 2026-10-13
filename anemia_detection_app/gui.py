@@ -136,7 +136,7 @@ class AnemiaDetectionWindow(QMainWindow):
         pipeline_box = QGroupBox("Pipeline")
         pipeline_layout = QFormLayout(pipeline_box)
         self.reducer_combo = QComboBox()
-        self.reducer_combo.addItems(["none", "lle", "isomap"])
+        self.reducer_combo.addItems(["none", "lle", "isomap", "lle_isomap"])
         self.classifier_combo = QComboBox()
         self.classifier_combo.addItems(["svm", "logistic_regression", "random_forest"])
         self.fine_tune_check = QCheckBox("Enable fine-tuning")

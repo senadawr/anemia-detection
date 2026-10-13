@@ -50,6 +50,9 @@ To run a headless training job:
 python main.py --train --reducer lle --classifier svm --fine-tune
 ```
 
+Use `--reducer lle_isomap` to train the hybrid reducer, which applies LLE and
+then ISOMAP before classification.
+
 ## Output folders
 
 - `saved_models/` for trained bundles
