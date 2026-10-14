@@ -7,7 +7,7 @@ This project implements MobileNetV2-based anemia classification pipelines for th
 - Dataset discovery and loading
 - OpenCV preprocessing
 - MobileNetV2 feature extraction
-- LLE and ISOMAP reduction
+- LLE, ISOMAP, and LLE-followed-by-ISOMAP hybrid reduction
 - Classical classifiers
 - Training and evaluation
 - Modern local web dashboard (HTML, CSS, and JavaScript)
@@ -39,6 +39,11 @@ Microsoft's DirectML plugin.
 ```powershell
 ./run-directml.ps1
 ```
+
+The launcher creates `.venv-directml` and installs
+`requirements-directml.txt` automatically the first time it runs. If setup
+fails, verify that Python 3.10 and the Python Launcher (`py.exe`) are
+installed, then run the command again.
 
 The dashboard should show `GPU ready` once DirectML detects the adapter. The
 standard `python main.py` command continues to use the current CPU-focused
