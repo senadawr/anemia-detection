@@ -35,6 +35,19 @@ class ClassifierBundle:
     def from_root_dir(cls, root_dir: Path) -> "ClassifierBundle":
         """Build a bundle from a saved model directory."""
 
+        result_root = root_dir.parent.parent / "results"
+        result_names = [root_dir.name]
+        try:
+            metadata = read_json(root_dir / "metadata.json")
+            pipeline_name = metadata.get("pipeline_name")
+            if isinstance(pipeline_name, str) and pipeline_name not in result_names:
+                result_names.append(pipeline_name)
+        except (OSError, ValueError):
+            pass
+        result_dir = next(
+            (result_root / name for name in result_names if (result_root / name).exists()),
+            result_root / root_dir.name,
+        )
         return cls(
             root_dir=root_dir,
             feature_model_path=root_dir / "feature_extractor.keras",
@@ -42,7 +55,7 @@ class ClassifierBundle:
             classifier_path=root_dir / "classifier.joblib",
             metadata_path=root_dir / "metadata.json",
             history_path=root_dir / "history.json",
-            metrics_path=root_dir.parent.parent / "results" / root_dir.name / "metrics.json",
+            metrics_path=result_dir / "metrics.json",
         )
 
     def load_classifier(self) -> Any:

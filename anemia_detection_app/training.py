@@ -11,7 +11,7 @@ from collections.abc import Callable
 import numpy as np
 import tensorflow as tf
 
-from .config import AppConfig
+from .config import AppConfig, DEFAULT_DATASET_ROOT
 from .dataset import DatasetBundle, DatasetLoader
 from .dimensionality_reduction import ReducerFactory, ReducerStore
 from .evaluation import EvaluationBundle, Evaluator
@@ -19,7 +19,7 @@ from .explainability import explain_test_images
 from .feature_extraction import FeatureMatrix, MobileNetFeatureExtractor
 from .models import BundleStore, ClassifierBundle, ClassifierFactory, extract_positive_probability
 from .runtime import configure_accelerator
-from .utils.io_utils import write_json
+from .utils.io_utils import read_json, write_json
 from .utils.logging_utils import setup_logging
 
 
@@ -41,6 +41,91 @@ class TrainingResult:
     history: dict[str, list[float]]
     evaluation: EvaluationBundle
     metadata: dict[str, Any]
+
+
+def restore_saved_artifacts(
+    bundle: ClassifierBundle,
+    progress_callback: Callable[[str], None] | None = None,
+) -> Path:
+    """Recreate evaluation and explainability artifacts without training."""
+
+    metadata = bundle.load_metadata()
+    config = AppConfig.from_dict(metadata["config"])
+    if not config.dataset.root_dir.exists():
+        config.dataset.root_dir = DEFAULT_DATASET_ROOT
+    config.output.results_dir = bundle.metrics_path.parent if bundle.metrics_path else (
+        bundle.root_dir.parent.parent / "results" / bundle.root_dir.name
+    )
+
+    loader = DatasetLoader(config)
+    dataset = loader.discover_splits()
+    feature_model = tf.keras.models.load_model(bundle.feature_model_path)
+    reducer = BundleStore.load_estimator(bundle.reducer_path)
+    classifier = BundleStore.load_estimator(bundle.classifier_path)
+    result_dir = config.output.results_dir
+    result_dir.mkdir(parents=True, exist_ok=True)
+
+    evaluations: dict[str, Any] = {}
+    for split_name, split in dataset.all_splits().items():
+        if progress_callback:
+            progress_callback(f"Rebuilding {split_name} evaluation artifacts...")
+        images = np.stack([
+            loader.preprocessor.preprocess_path(path)
+            for path in split.paths
+        ])
+        features = feature_model.predict(images, batch_size=config.training.batch_size, verbose=0)
+        reduced = reducer.transform(features)
+        predictions = classifier.predict(reduced)
+        scores = extract_positive_probability(classifier, reduced)
+        evaluation = Evaluator.evaluate_split(split.labels, predictions, scores)
+        evaluations[split_name] = evaluation
+        split_dir = result_dir / split_name
+        split_dir.mkdir(parents=True, exist_ok=True)
+        write_json(split_dir / "classification_report.json", evaluation.report)
+        Evaluator.plot_confusion_matrix(
+            evaluation.confusion_matrix,
+            split.class_names,
+            split_dir / "confusion_matrix.png",
+            f"{split_name.title()} Confusion Matrix",
+        )
+        Evaluator.plot_roc_curve(
+            split.labels,
+            scores,
+            split_dir / "roc_curve.png",
+            f"{split_name.title()} ROC Curve",
+        )
+        write_json(
+            split_dir / "chart_data.json",
+            {
+                "class_names": list(split.class_names),
+                "confusion_matrix": evaluation.confusion_matrix.tolist(),
+                "roc": Evaluator.roc_points(split.labels, scores),
+            },
+        )
+
+    evaluation_bundle = EvaluationBundle(
+        training=evaluations["training"],
+        validation=evaluations["validation"],
+        testing=evaluations["testing"],
+    )
+    Evaluator.save_metrics(evaluation_bundle, result_dir)
+    if bundle.history_path and bundle.history_path.exists():
+        Evaluator.plot_history(read_json(bundle.history_path), result_dir / "training_curves")
+
+    shap_manifest = result_dir / "explainability" / "manifest.json"
+    if not shap_manifest.exists():
+        if progress_callback:
+            progress_callback("Rebuilding SHAP explanations from the saved model...")
+        explain_test_images(
+            config,
+            bundle,
+            dataset.testing,
+            result_dir / "explainability",
+            config.training.shap_samples,
+            config.training.shap_max_evals,
+            progress_callback=progress_callback,
+        )
+    return result_dir
 
 
 class PipelineTrainer:
@@ -266,3 +351,44 @@ class PipelinePredictor:
             confidence=confidence,
             probabilities=probabilities,
         )
+
+    def predict_paths(self, image_paths: list[str]) -> np.ndarray:
+        """Predict a collection of images in one feature-extraction batch."""
+
+        _, probabilities = self.predict_paths_with_probabilities(image_paths)
+        return np.asarray(self.classifier.classes_[
+            np.argmax(probabilities, axis=1)
+        ], dtype=np.int64)
+
+    def predict_paths_with_probabilities(
+        self,
+        image_paths: list[str],
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return hard predictions and class probabilities for image paths."""
+
+        if not image_paths:
+            return np.asarray([], dtype=np.int64), np.empty((0, 0))
+        images = np.stack([
+            self.preprocessor.preprocess_path(path)
+            for path in image_paths
+        ])
+        features = self.feature_model.predict(
+            images,
+            batch_size=self.config.training.batch_size,
+            verbose=0,
+        )
+        reduced = self.reducer.transform(features)
+        probabilities = np.asarray(self.classifier.predict_proba(reduced))
+        predictions = np.asarray(
+            self.classifier.classes_[np.argmax(probabilities, axis=1)],
+            dtype=np.int64,
+        )
+        return predictions, probabilities
+
+    def positive_probabilities(self, probabilities: np.ndarray) -> np.ndarray:
+        """Extract the probability for binary class label 1."""
+
+        class_indices = np.flatnonzero(np.asarray(self.classifier.classes_) == 1)
+        if len(class_indices) != 1:
+            raise ValueError("The loaded classifier does not expose binary class label 1.")
+        return probabilities[:, class_indices[0]]

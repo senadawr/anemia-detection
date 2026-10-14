@@ -33,10 +33,20 @@
         <div class="panel-heading compact"><p class="eyebrow">Saved model</p><h2>Open a run</h2></div>
         <label>Model directory<input id="model-directory" type="text" placeholder=".../saved_models/run_name"></label>
         <button class="secondary-action" id="load-button" type="button">Load saved model</button>
+        <hr>
+        <div class="panel-heading compact"><p class="eyebrow">Statistical comparison</p><h2>Compare 3 models</h2></div>
+        <p class="hint">Enter three saved-model directories to compare predictions on the test dataset.</p>
+        <label>Model 1<input id="comparison-model-1" type="text" placeholder=".../saved_models/run_one"></label>
+        <label>Model 2<input id="comparison-model-2" type="text" placeholder=".../saved_models/run_two"></label>
+        <label>Model 3<input id="comparison-model-3" type="text" placeholder=".../saved_models/run_three"></label>
+        <button class="secondary-action" id="compare-button" type="button">Run McNemar + DeLong tests</button>
       </aside>
 
       <div class="main-panel">
         <section class="metric-grid" aria-label="Evaluation summary" id="metrics"><div class="empty-state">Train or load a model to see its evaluation.</div></section>
+        <section class="comparison-card" id="comparison-results" aria-live="polite">
+          <div class="empty-state">Select three trained models to see pairwise McNemar tests.</div>
+        </section>
         <section class="prediction-card">
           <div><p class="eyebrow">Single image inference</p><h2>Check a sample</h2><p class="hint">Upload a supported image to use the currently loaded pipeline.</p></div>
           <div class="prediction-controls"><label class="file-input"><input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff"><span>Choose image</span></label><button class="primary-action" id="predict-button" type="button" disabled>Predict</button></div>

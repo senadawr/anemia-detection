@@ -63,7 +63,7 @@ class ReductionConfig:
     """Dimensionality reduction settings."""
 
     reducer: ReducerName = "none"
-    n_components: int = 8
+    n_components: int = 64
     n_neighbors: int = 10
     lle_method: str = "standard"
     lle_eigen_solver: str = "auto"

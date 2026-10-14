@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.stats import chi2, norm
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -44,6 +45,173 @@ class EvaluationBundle:
     training: SplitEvaluation
     validation: SplitEvaluation
     testing: SplitEvaluation
+
+
+@dataclass(slots=True)
+class McNemarResult:
+    """A pairwise McNemar test result."""
+
+    model_a: str
+    model_b: str
+    contingency_matrix: list[list[int]]
+    chi_squared: float
+    p_value: float
+    corrected_p_value: float
+
+
+@dataclass(slots=True)
+class DeLongResult:
+    """A pairwise correlated ROC-AUC comparison."""
+
+    model_a: str
+    model_b: str
+    auc_a: float
+    auc_b: float
+    z_score: float
+    p_value: float
+    significant: bool
+
+
+def run_delong_tests(
+    y_true: np.ndarray,
+    probabilities: dict[str, np.ndarray],
+    alpha: float = 0.05,
+) -> list[DeLongResult]:
+    """Run all three pairwise DeLong tests with a Bonferroni threshold."""
+
+    if len(probabilities) != 3:
+        raise ValueError("DeLong comparison requires exactly three models.")
+    labels = np.asarray(y_true)
+    if len(labels) == 0 or set(np.unique(labels)) != {0, 1}:
+        raise ValueError("DeLong testing requires both binary target classes.")
+    names = list(probabilities)
+    scores = np.asarray([np.asarray(probabilities[name]) for name in names], dtype=float)
+    if scores.ndim != 2 or scores.shape[1] != len(labels):
+        raise ValueError("All model probabilities must match the test labels.")
+    if not np.isfinite(scores).all():
+        raise ValueError("Model probabilities must be finite.")
+
+    aucs, covariance = _delong_auc_covariance(labels, scores)
+    threshold = alpha / 3
+    results: list[DeLongResult] = []
+    for first_index, second_index in ((0, 1), (1, 2), (0, 2)):
+        first_name = names[first_index]
+        variance = (
+            covariance[first_index, first_index]
+            + covariance[second_index, second_index]
+            - 2 * covariance[first_index, second_index]
+        )
+        z_score = (
+            float((aucs[first_index] - aucs[second_index]) / np.sqrt(variance))
+            if variance > 0
+            else 0.0
+        )
+        p_value = float(2 * norm.sf(abs(z_score)))
+        results.append(DeLongResult(
+            model_a=first_name,
+            model_b=names[second_index],
+            auc_a=float(aucs[first_index]),
+            auc_b=float(aucs[second_index]),
+            z_score=z_score,
+            p_value=p_value,
+            significant=p_value < threshold,
+        ))
+    return results
+
+
+def _delong_auc_covariance(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate correlated AUC estimates and their DeLong covariance."""
+
+    order = np.argsort(-y_true)
+    sorted_scores = probabilities[:, order]
+    positive_count = int(np.sum(y_true))
+    negative_count = len(y_true) - positive_count
+    positive_ranks = np.asarray([
+        _compute_midrank(row[:positive_count]) for row in sorted_scores
+    ])
+    negative_ranks = np.asarray([
+        _compute_midrank(row[positive_count:]) for row in sorted_scores
+    ])
+    all_ranks = np.asarray([_compute_midrank(row) for row in sorted_scores])
+    aucs = (
+        all_ranks[:, :positive_count].sum(axis=1) / positive_count / negative_count
+        - (positive_count + 1) / (2 * negative_count)
+    )
+    v01 = (all_ranks[:, :positive_count] - positive_ranks) / negative_count
+    v10 = 1 - (all_ranks[:, positive_count:] - negative_ranks) / positive_count
+    covariance = np.atleast_2d(np.cov(v01, bias=False) / positive_count
+                               + np.cov(v10, bias=False) / negative_count)
+    return aucs, covariance
+
+
+def _compute_midrank(values: np.ndarray) -> np.ndarray:
+    """Return average ranks for tied values."""
+
+    order = np.argsort(values)
+    sorted_values = values[order]
+    ranks = np.empty(len(values), dtype=float)
+    index = 0
+    while index < len(values):
+        end = index + 1
+        while end < len(values) and sorted_values[end] == sorted_values[index]:
+            end += 1
+        ranks[order[index:end]] = 0.5 * (index + end - 1) + 1
+        index = end
+    return ranks
+
+
+def run_mcnemar_tests(
+    y_true: np.ndarray,
+    predictions: dict[str, np.ndarray],
+) -> list[McNemarResult]:
+    """Run all three Bonferroni-corrected pairwise McNemar tests."""
+
+    if len(predictions) != 3:
+        raise ValueError("McNemar comparison requires exactly three models.")
+    model_names = list(predictions)
+    if len(y_true) == 0:
+        raise ValueError("The test dataset must contain at least one sample.")
+    normalized_predictions = {
+        name: np.asarray(values) for name, values in predictions.items()
+    }
+    if any(len(values) != len(y_true) for values in normalized_predictions.values()):
+        raise ValueError("All model predictions must match the test labels.")
+
+    results: list[McNemarResult] = []
+    for first_index, first_name in enumerate(model_names):
+        for second_name in model_names[first_index + 1:]:
+            first_correct = normalized_predictions[first_name] == y_true
+            second_correct = normalized_predictions[second_name] == y_true
+            both_correct = int(np.count_nonzero(first_correct & second_correct))
+            first_correct_second_wrong = int(np.count_nonzero(first_correct & ~second_correct))
+            first_wrong_second_correct = int(np.count_nonzero(~first_correct & second_correct))
+            both_wrong = int(np.count_nonzero(~first_correct & ~second_correct))
+            discordant = first_correct_second_wrong + first_wrong_second_correct
+            chi_squared = (
+                (abs(first_correct_second_wrong - first_wrong_second_correct) - 1) ** 2 / discordant
+                if discordant
+                else 0.0
+            )
+            results.append(
+                McNemarResult(
+                    model_a=first_name,
+                    model_b=second_name,
+                    contingency_matrix=[
+                        [both_correct, first_correct_second_wrong],
+                        [first_wrong_second_correct, both_wrong],
+                    ],
+                    chi_squared=float(chi_squared),
+                    p_value=float(chi2.sf(chi_squared, 1)),
+                    corrected_p_value=0.0,
+                )
+            )
+
+    for result in results:
+        result.corrected_p_value = min(1.0, result.p_value * len(results))
+    return results
 
 
 class Evaluator:

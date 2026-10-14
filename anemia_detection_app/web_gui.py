@@ -16,6 +16,7 @@ from typing import Any
 
 from flask import Flask, jsonify, request, send_from_directory
 
+from .comparison import compare_saved_models
 from .config import AppConfig, build_default_config
 from .models import ClassifierBundle
 from .runtime import configure_accelerator
@@ -32,6 +33,9 @@ class ApplicationState:
         self.predictor: PipelinePredictor | None = None
         self.result_dir: Path | None = None
         self.training = False
+        self.comparison = False
+        self.comparison_result: dict[str, Any] | None = None
+        self.comparison_error: str | None = None
         self.logs: list[str] = ["Ready. Configure a pipeline or load a saved model."]
         self.error: str | None = None
         self.lock = threading.Lock()
@@ -80,6 +84,9 @@ def create_app() -> Flask:
         with state.lock:
             return jsonify({
                 "training": state.training,
+                "comparison": state.comparison,
+                "comparison_result": state.comparison_result,
+                "comparison_error": state.comparison_error,
                 "model_loaded": state.predictor is not None,
                 "result_dir": str(state.result_dir) if state.result_dir else None,
                 "logs": state.logs,
@@ -176,6 +183,42 @@ def create_app() -> Flask:
         except Exception as exc:
             state.log(f"Prediction failed: {exc}")
             return jsonify({"error": str(exc)}), 400
+
+    @app.post("/api/compare-models")
+    def compare_models():
+        payload = request.get_json(silent=True) or {}
+        model_directories = payload.get("model_directories")
+        if not isinstance(model_directories, list) or len(model_directories) != 3:
+            return jsonify({"error": "Provide exactly three model directories."}), 400
+        with state.lock:
+            if state.comparison:
+                return jsonify({"error": "A model comparison is already in progress."}), 409
+            state.comparison = True
+            state.comparison_result = None
+            state.comparison_error = None
+        state.log("McNemar and DeLong comparison started.")
+
+        def run_comparison() -> None:
+            try:
+                comparison = compare_saved_models(
+                    model_directories,
+                    payload.get("dataset_root"),
+                    progress_callback=state.log,
+                )
+                with state.lock:
+                    state.comparison_result = comparison
+                state.log("McNemar comparison complete.")
+            except Exception:
+                message = traceback.format_exc()
+                with state.lock:
+                    state.comparison_error = message
+                state.log("McNemar comparison failed. See the dashboard log for details.")
+            finally:
+                with state.lock:
+                    state.comparison = False
+
+        threading.Thread(target=run_comparison, name="anemia-comparison", daemon=True).start()
+        return jsonify({"ok": True}), 202
 
     @app.get("/api/results")
     def results():
