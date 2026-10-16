@@ -1,4 +1,4 @@
-# Anemia Detection Thesis Application
+# Anemia Detection Application
 
 This project implements MobileNetV2-based anemia classification pipelines for the cleaned dataset in `dataset_clean/`.
 
